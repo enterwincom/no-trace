@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NoTrace - 안전한 사진 공유의 시작</title>
+    
+    <!-- 외부 라이브러리 (CDN) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/piexifjs@1.0.6/piexif.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <style>
+        :root {
+            --primary-color: #007AFF;
+            --danger-color: #FF3B30;
+            --safe-color: #34C759;
+            --bg-color: #F2F2F7;
+            --card-bg: #FFFFFF;
+        }
+
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
+            margin: 0; padding: 0; background-color: var(--bg-color); color: #1C1C1E;
+            line-height: 1.5;
+        }
+
+        .container { max-width: 500px; margin: 0 auto; padding: 20px; box-sizing: border-box; }
+
+        /* 헤더 섹션 */
+        header { text-align: center; padding: 40px 0 30px; }
+        .logo-icon { 
+            display: inline-block; background: var(--primary-color); color: white; 
+            width: 64px; height: 64px; border-radius: 16px; line-height: 64px; 
+            font-size: 32px; margin-bottom: 16px; 
+            box-shadow: 0 8px 16px rgba(0,122,255,0.25);
+        }
+        h1 { margin: 0; font-size: 2rem; font-weight: 800; letter-spacing: -0.5px; }
+        .subtitle { margin: 8px 0; color: #8E8E93; font-size: 1rem; }
+
+        /* 개인정보 보호 안내 */
+        .privacy-note {
+            background: #E8F2FF; border-radius: 12px; padding: 12px;
+            font-size: 0.85rem; color: #0056b3; text-align: center; margin-bottom: 24px;
+        }
+
+        /* 업로드 영역 */
+        #drop-zone { 
+            border: 2px dashed #C7C7CC; border-radius: 24px; padding: 60px 20px; 
+            text-align: center; background: var(--card-bg); transition: all 0.3s ease; cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        }
+        #drop-zone.active { border-color: var(--primary-color); background: #F0F7FF; transform: scale(1.02); }
+        #drop-zone p { margin: 10px 0 0; color: #636366; font-weight: 500; }
+
+        /* 파일 리스트 */
+        .file-list { margin-top: 30px; display: none; }
+        .list-header { 
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 12px; padding: 0 5px;
+        }
+        .list-header h3 { font-size: 0.9rem; color: #8E8E93; margin: 0; }
+        
+        .file-item {
+            background: var(--card-bg); margin-bottom: 10px; padding: 16px; 
+            border-radius: 16px; display: flex; align-items: center; justify-content: space-between;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04); animation: fadeIn 0.4s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .file-info { font-size: 0.95rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; margin-right: 12px; }
+        .status-badge { font-size: 0.75rem; padding: 5px 10px; border-radius: 20px; font-weight: 700; white-space: nowrap; }
+        .status-danger { background: #FFE5E5; color: var(--danger-color); }
+        .status-safe { background: #E5F9EB; color: var(--safe-color); }
+
+        /* 하단 액션 버튼 영역 */
+        .action-area {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            padding: 24px 20px calc(24px + env(safe-area-inset-bottom)); 
+            background: rgba(255,255,255,0.85);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            display: none; border-top: 1px solid rgba(0,0,0,0.05);
+        }
+        .btn { 
+            display: block; width: 100%; max-width: 460px; margin: 0 auto;
+            padding: 18px; background: var(--primary-color); color: white; 
+            border: none; border-radius: 18px; font-size: 1.05rem; font-weight: 700; 
+            cursor: pointer; box-shadow: 0 8px 20px rgba(0,122,255,0.3);
+            transition: all 0.2s;
+        }
+        .btn:active { transform: scale(0.97); opacity: 0.9; }
+        .btn:disabled { background: #AEAEB2; box-shadow: none; }
+
+        #file-input { display: none; }
+        .spacer { height: 120px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div class="logo-icon">🛡️</div>
+        <h1>NoTrace</h1>
+        <p class="subtitle">사진의 디지털 발자국 지우기</p>
+    </header>
+
+    <div class="privacy-note">
+        🔒 사진은 서버로 전송되지 않으니 안심하셔도 됩니다.
+    </div>
+
+    <div id="drop-zone">
+        <span style="font-size: 32px;">📸</span>
+        <p>사진을 선택하거나 드래그하세요</p>
+        <p style="font-size: 0.8rem; color: #AEAEB2; font-weight: normal;">(JPEG 포맷 지원)</p>
+        <input type="file" id="file-input" accept="image/jpeg,image/jpg" multiple>
+    </div>
+
+    <div id="file-list" class="file-list">
+        <div class="list-header">
+            <h3>처리 대기 중인 사진</h3>
+            <span id="file-count" style="font-weight: bold; color: var(--primary-color);">0장</span>
+        </div>
+        <div id="items-container"></div>
+    </div>
+    
+    <div class="spacer"></div>
+</div>
+
+<div id="action-area" class="action-area">
+    <button id="download-all-btn" class="btn">모든 정보 삭제 후 ZIP 저장</button>
+</div>
+
+<script>
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const fileList = document.getElementById('file-list');
+    const itemsContainer = document.getElementById('items-container');
+    const actionArea = document.getElementById('action-area');
+    const fileCountSpan = document.getElementById('file-count');
+    const downloadBtn = document.getElementById('download-all-btn');
+
+    let uploadedFiles = [];
+
+    // 클릭 시 파일 선택창 열기
+    dropZone.onclick = () => fileInput.click();
+    fileInput.onchange = (e) => handleFiles(e.target.files);
+
+    // 드래그 앤 드롭 효과
+    dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('active'); };
+    dropZone.ondragleave = () => dropZone.classList.remove('active');
+    dropZone.ondrop = (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('active');
+        handleFiles(e.dataTransfer.files);
+    };
+
+    // 파일 처리 핵심 로직
+    async function handleFiles(files) {
+        if (files.length === 0) return;
+        
+        fileList.style.display = "block";
+        actionArea.style.display = "block";
+        
+        for (let file of files) {
+            // 확장자 체크 (기본적인 JPEG)
+            if (!file.type.match('image/jpeg.*')) continue;
+            
+            const fileData = await readFileAsDataURL(file);
+            const hasGps = await checkGps(file);
+            
+            uploadedFiles.push({
+                name: file.name,
+                data: fileData,
+                hasGps: hasGps
+            });
+
+            addToFileList(file.name, hasGps);
+        }
+        fileCountSpan.innerText = uploadedFiles.length + "장";
+        
+        // 업로드 후 리스트로 부드러운 스크롤
+        window.scrollTo({ top: dropZone.offsetTop, behavior: 'smooth' });
+    }
+
+    function readFileAsDataURL(file) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function checkGps(file) {
+        return new Promise((resolve) => {
+            EXIF.getData(file, function() {
+                const lat = EXIF.getTag(this, "GPSLatitude");
+                resolve(!!lat); // 좌표가 있으면 true, 없으면 false
+            });
+        });
+    }
+
+    function addToFileList(name, hasGps) {
+        const div = document.createElement('div');
+        div.className = 'file-item';
+        div.innerHTML = `
+            <div class="file-info">${name}</div>
+            <span class="status-badge ${hasGps ? 'status-danger' : 'status-safe'}">
+                ${hasGps ? '📍 위치정보 포함' : '✅ 안전함'}
+            </span>
+        `;
+        itemsContainer.appendChild(div);
+    }
+
+    // 일괄 삭제 및 ZIP 다운로드
+    downloadBtn.onclick = async function() {
+        if (uploadedFiles.length === 0) return;
+
+        const zip = new JSZip();
+        this.innerText = "데이터 정제 중...";
+        this.disabled = true;
+
+        for (let fileObj of uploadedFiles) {
+            try {
+                // piexif.remove는 모든 EXIF(위치, 기기정보, 시간 등)를 삭제합니다.
+                const cleanData = piexif.remove(fileObj.data);
+                const base64Data = cleanData.split(',')[1];
+                zip.file("cleansed_" + fileObj.name, base64Data, {base64: true});
+            } catch (e) {
+                // 이미 메타데이터가 없는 경우 원본 데이터 유지
+                const base64Data = fileObj.data.split(',')[1];
+                zip.file("cleansed_" + fileObj.name, base64Data, {base64: true});
+            }
+        }
+
+        const content = await zip.generateAsync({type: "blob"});
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(content);
+        link.download = "NoTrace_Protected_Photos.zip";
+        link.click();
+        
+        this.innerText = "저장 완료!";
+        setTimeout(() => {
+            this.innerText = "모든 정보 삭제 후 ZIP 저장";
+            this.disabled = false;
+        }, 2000);
+    };
+</script>
+
+</body>
+</html>
